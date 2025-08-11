@@ -34,12 +34,10 @@ def get_data(ticker, period='max', interval='1d'):
     Returns:
     pd.DataFrame: A DataFrame containing the data.
     """
-    # Get today's date for file naming
-    today = pd.Timestamp.now().strftime('%Y%m%d')
     # Collect data
     ohlcv = collect_ohlcv(ticker, period, interval)
-    ohlcv.to_csv(f'data/{ticker}_ohlcv{today}.csv')
-    print(f"Data collected and saved to: data/{ticker}_ohlcv{today}.csv")
+    ohlcv.to_csv(f'data/{ticker}_ohlcv.csv')
+    print(f"Data collected and saved to: data/{ticker}_ohlcv.csv")
     return ohlcv
 
 if __name__ == "__main__":
