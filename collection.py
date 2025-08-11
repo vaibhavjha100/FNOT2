@@ -5,6 +5,9 @@ Collect structured and unstructured data equity data from various sources.
 import pandas as pd
 import numpy as np
 import yfinance as yf
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 def collect_ohlcv(ticker, period='max', interval='1d'):
     """
@@ -24,8 +27,23 @@ def collect_ohlcv(ticker, period='max', interval='1d'):
     print(f"Data collected and saved to: data/{ticker}_ohlcv.csv")
     return df
 
+
+def collect_news(start_date=None, end_date=None):
+    """
+    Collect news data from start_date to end_date.
+
+    Parameters:
+    start_date (str): The start date for news collection in 'YYYY-MM-DD' format.
+    end_date (str): The end date for news collection in 'YYYY-MM-DD' format.
+    Returns:
+    pd.DataFrame: A DataFrame containing the news data.
+    """
+
+
+
+
 if __name__ == "__main__":
-    ticker = '^NSEI'
+    ticker = os.getenv('TICKER', '^NSEI')  # Default to Nifty50 if TICKER is not set in .env
     data = collect_ohlcv(ticker, period='max', interval='1d')
     print(data.head())
     print(data.info())
