@@ -9,9 +9,6 @@ import os
 from dotenv import load_dotenv
 import sys
 
-# Show which interpreter is running this script (helps detect mismatch)
-print(f"Using Python: {sys.executable}")
-
 from marketminer import scrape_economic_times
 import requests
 load_dotenv()
