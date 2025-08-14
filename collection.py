@@ -29,7 +29,7 @@ def collect_ohlcv(ticker, start, end):
     # Make end date inclusive
     end = pd.to_datetime(end) + pd.Timedelta(days=1)
     ticker_yf =ticker + '.NS' if not ticker.endswith('.NS') else ''
-    df = yf.download(ticker_yf, start=start, end=end)
+    df = yf.download(ticker_yf, start=start, end=end, multi_level_index=False)
     df.sort_index(ascending=True, inplace=True)
     df.to_csv(f'data/{ticker}_ohlcv.csv')
     print(f"Data collected and saved to: data/{ticker}_ohlcv.csv")
