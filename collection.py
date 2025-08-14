@@ -2,6 +2,7 @@
 Collect structured and unstructured data equity data from various sources.
 '''
 
+import time
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -25,8 +26,10 @@ def collect_ohlcv(ticker, start, end):
     Returns:
     pd.DataFrame: A DataFrame containing the OHLCV data.
     """
-    ticker += '.NS'
-    df = yf.download(ticker, start=start, end=end)
+    # Make end date inclusive
+    end = pd.to_datetime(end) + pd.Timedelta(days=1)
+    ticker_yf =ticker + '.NS' if not ticker.endswith('.NS') else ''
+    df = yf.download(ticker_yf, start=start, end=end)
     df.sort_index(ascending=True, inplace=True)
     df.to_csv(f'data/{ticker}_ohlcv.csv')
     print(f"Data collected and saved to: data/{ticker}_ohlcv.csv")
@@ -46,12 +49,11 @@ def collect_news(start, end):
     print("News data collected and saved to: data/news.csv")
     return news_df
 
-def get_data(api_key, ticker, start, end):
+def get_data(ticker, start, end):
     """
     Run all functions in this module to collect various types of data.
 
     Parameters:
-    api_key (str): The API key for Alpha Vantage.
     ticker (str): The stock ticker symbol.
     start (str): The start date for the data collection.
     end (str): The end date for the data collection.
@@ -65,6 +67,7 @@ def get_data(api_key, ticker, start, end):
     ohlcv = collect_ohlcv(ticker, start=start, end=end)
     print(ohlcv.head())
     print(ohlcv.info())
+    time.sleep(2)
     news = collect_news(start=start, end=end)
     print(news.head())
     print(news.info())
@@ -74,7 +77,6 @@ def get_data(api_key, ticker, start, end):
 
 if __name__ == "__main__":
     ticker = os.getenv('TICKER')
-    api_key = os.getenv('API_KEY')
     start = os.getenv('START_DATE')
     end = os.getenv('END_DATE')
-    get_data(api_key, ticker, start, end)
+    get_data(ticker, start, end)
