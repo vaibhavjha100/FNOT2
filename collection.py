@@ -7,6 +7,12 @@ import numpy as np
 import yfinance as yf
 import os
 from dotenv import load_dotenv
+import sys
+
+# Show which interpreter is running this script (helps detect mismatch)
+print(f"Using Python: {sys.executable}")
+
+from marketminer import scrape_economic_times
 import requests
 load_dotenv()
 
@@ -29,11 +35,19 @@ def collect_ohlcv(ticker, start, end):
     print(f"Data collected and saved to: data/{ticker}_ohlcv.csv")
     return df
 
-def collect_news(d):
+def collect_news(start, end):
     '''
-    Collect news data
+    Collect news data from economic times using marketminer.
+    Parameters:
+    start (str): The start date for the news collection.
+    end (str): The end date for the news collection.
+    Returns:
+    pd.DataFrame: A DataFrame containing the news data.
     '''
-    pass
+    news_df = scrape_economic_times(start, end)
+    news_df.to_csv('data/news.csv', index=True)
+    print("News data collected and saved to: data/news.csv")
+    return news_df
 
 def get_data(api_key, ticker, start, end):
     """
@@ -54,6 +68,9 @@ def get_data(api_key, ticker, start, end):
     ohlcv = collect_ohlcv(ticker, start=start, end=end)
     print(ohlcv.head())
     print(ohlcv.info())
+    news = collect_news(start=start, end=end)
+    print(news.head())
+    print(news.info())
 
 
 
