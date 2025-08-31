@@ -82,6 +82,25 @@ def collect_macro_india(start, end):
         print(f"✅ {key}_macro data saved to: data/{key}.csv")
     return m_dict
 
+def get_actions(ticker, start, end):
+    """
+    Collect stock actions data for a given ticker using yfinance.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+    start (str): The start date for the data collection.
+    end (str): The end date for the data collection.
+
+    Returns:
+    pd.DataFrame: A DataFrame containing the stock actions data.
+    """
+    ticker_yf =ticker + '.NS' if not ticker.endswith('.NS') else ''
+    stock = yf.Ticker(ticker_yf)
+    actions = stock.actions
+    actions = actions[(actions.index >= start) & (actions.index <= end)]
+    actions.to_csv(f'data/{ticker}_actions.csv', index=True)
+    print(f"✅ Actions data collected and saved to: data/{ticker}_actions.csv")
+    return actions
 
 def get_data(ticker, start, end):
     """
@@ -118,6 +137,9 @@ def get_data(ticker, start, end):
         print(f"{key} DataFrame:")
         print(value.head())
         print(value.info())
+    actions = get_actions(ticker, start=start, end=end)
+    print(actions.head())
+    print(actions.info())
 
 
 
