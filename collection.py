@@ -4,14 +4,11 @@ Collect structured and unstructured data equity data from various sources.
 
 import time
 import pandas as pd
-import numpy as np
 import yfinance as yf
 import os
 from dotenv import load_dotenv
-import sys
 
 from marketminer import scrape_economic_times, scrape_fundamentals, scrape_macro_india
-import requests
 load_dotenv()
 
 def collect_ohlcv(ticker, start, end):
