@@ -66,6 +66,20 @@ def get_trading_data(ticker, spread_coeff=0.1, sigma_noise=0.001):
 
     return trading_df[['execution_price']]
 
+def get_ohlcv_index(ticker):
+    """
+    Get the OHLCV data index for a given ticker.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+
+    Returns:
+    pd.DatetimeIndex: The index of the OHLCV DataFrame.
+    """
+    file_path = os.path.join(DATADIR, f"{ticker}_ohlcv.csv")
+    df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
+    return df.index
+
 def preprocess_ohclv(ticker):
     """
     Preprocess OHLCV data for a given ticker.
@@ -227,6 +241,21 @@ def preprocess_sentiment(ticker):
 
     return df
 
+def preprocess_actions(ticker):
+    """
+    Preprocess actions data for a given ticker.
+    Actions data is assumed to be in 'data/{ticker}_actions.csv'.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+
+    Returns:
+    pd.DataFrame: A preprocessed DataFrame containing the actions data.
+    """
+    file_path = os.path.join(DATADIR, f"{ticker}_actions.csv")
+    df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
+
+    return df
 
 if __name__ == "__main__":
     # Load environment variables
@@ -236,9 +265,39 @@ if __name__ == "__main__":
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
     # EDA
-    trading_df = get_trading_data(ticker)
-    print(trading_df.head())
-    print(trading_df.info())
+    actions = preprocess_actions(ticker)
+    print(actions.head())
+    print(actions.info())
+    print(actions.describe())
+    # Check for missing values
+    print("Missing values in actions data:")
+    print(actions.isnull().sum())
+    # Check for duplicates
+    print(f"Number of duplicate rows in actions data: {actions.duplicated().sum()}")
+    # Check date range
+    print(f"Date range in actions data: {actions.index.min()} to {actions.index.max()}")
+    # Check if index is ascending
+    print(f"Is index ascending? {actions.index.is_monotonic_increasing}")
+    # Outliers detection using Z-score
+    z_scores = np.abs(stats.zscore(actions.select_dtypes(include=[np.number])))
+    outliers = (z_scores > 3).any(axis=1)
+    print(f"Number of outlier rows in actions data: {outliers.sum()}")
+
+    # Plot distribution of Dividends column
+    plt.figure(figsize=(10, 6))
+    sns.histplot(actions['Dividends'].dropna(), bins=30, kde=True)
+    plt.title("Distribution of Dividends")
+    plt.xlabel("Dividends")
+    plt.ylabel("Frequency")
+    plt.show()
+
+    # Plot distribution of Stock Splits column
+    plt.figure(figsize=(10, 6))
+    sns.histplot(actions['Stock Splits'].dropna(), bins=30, kde=True)
+    plt.title("Distribution of Stock Splits")
+    plt.xlabel("Stock Splits")
+    plt.ylabel("Frequency")
+    plt.show()
 
 
 
