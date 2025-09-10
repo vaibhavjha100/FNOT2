@@ -239,6 +239,10 @@ def preprocess_sentiment(ticker):
     numeric_cols = df.select_dtypes(include=[np.number]).columns
     df[numeric_cols] = df[numeric_cols].apply(zscore)
 
+    # Set to OHLCV date index
+    ohlcv_index = get_ohlcv_index(ticker)
+    df = df.reindex(ohlcv_index).fillna(0)
+
     return df
 
 def preprocess_actions(ticker):
@@ -255,6 +259,54 @@ def preprocess_actions(ticker):
     file_path = os.path.join(DATADIR, f"{ticker}_actions.csv")
     df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
 
+    idx = get_ohlcv_index(ticker)
+
+    # Ensure index is timezone-naive to match OHLCV
+    if df.index.tz is not None:
+        df.index = df.index.tz_convert(None)
+
+    actions = pd.DataFrame(0, index=idx, columns=df.columns)
+
+    # Map each announcement date to next trading day using 'bfill' logic (get_indexer)
+    # positions array gives integer positions in ohlcv_idx; -1 means no suitable index (event after last trading day)
+    positions = idx.get_indexer(df.index, method='bfill')
+
+    for ann_date, pos in zip(df.index, positions):
+        if pos == -1:
+            continue
+        trade_date = idx[pos]
+        actions.loc[trade_date] += df.loc[ann_date]
+    actions.fillna(0, inplace=True)
+
+    actions['Dividend_Event'] = (actions['Dividends'] > 0).astype(int)
+    actions['Stock_Split_Event'] = (actions['Stock Splits'] > 0).astype(int)
+
+    return actions
+
+def preprocess_balance_sheet(ticker):
+    """
+    Preprocess balance sheet data for a given ticker.
+    Balance sheet data is assumed to be in 'data/{ticker}_balance_sheet.csv'.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+
+    Returns:
+    pd.DataFrame: A preprocessed DataFrame containing the balance sheet data.
+    """
+    file_path = os.path.join(DATADIR, f"{ticker}_balance_sheet.csv")
+    df = pd.read_csv(file_path).sort_index()
+
+    # Check if Unnamed: 0 column exists and set it as index if it does and rename it to 'Date'
+    # For fundamentals data, the dates are years, not in datetime format (for example, 2020)
+    if 'Unnamed: 0' in df.columns:
+        df['Unnamed: 0'] = pd.to_datetime(df['Unnamed: 0'], format='%Y')
+        df.set_index('Unnamed: 0', inplace=True)
+        df.index.name = 'Date'
+
+    df.index = pd.to_datetime(df.index)
+    df.sort_index(inplace=True)
+
     return df
 
 if __name__ == "__main__":
@@ -265,42 +317,31 @@ if __name__ == "__main__":
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
     # EDA
-    actions = preprocess_actions(ticker)
-    print(actions.head())
-    print(actions.info())
-    print(actions.describe())
-    # Check for missing values
-    print("Missing values in actions data:")
-    print(actions.isnull().sum())
-    # Check for duplicates
-    print(f"Number of duplicate rows in actions data: {actions.duplicated().sum()}")
-    # Check date range
-    print(f"Date range in actions data: {actions.index.min()} to {actions.index.max()}")
-    # Check if index is ascending
-    print(f"Is index ascending? {actions.index.is_monotonic_increasing}")
+    df = preprocess_balance_sheet(ticker)
+    print(df.head())
+    print(df.info())
+    print(df.describe().T)
+    # Null values
+    print("Null values in each column:")
+    print(df.isnull().sum())
+    # Duplicate rows
+    print(f"Number of duplicate rows: {df.duplicated().sum()}")
+    # Date range
+    print(f"Date range: {df.index.min()} to {df.index.max()}")
+    # Are dates sorted?
+    print(f"Dates sorted: {df.index.is_monotonic_increasing}")
     # Outliers detection using Z-score
-    z_scores = np.abs(stats.zscore(actions.select_dtypes(include=[np.number])))
+    z_scores = np.abs(stats.zscore(df.select_dtypes(include=[np.number]), nan_policy='omit'))
     outliers = (z_scores > 3).any(axis=1)
-    print(f"Number of outlier rows in actions data: {outliers.sum()}")
+    print(f"Number of outlier rows (Z-score > 3): {outliers.sum()}")
 
-    # Plot distribution of Dividends column
+    # Distribution plots for TotalLiabilities
     plt.figure(figsize=(10, 6))
-    sns.histplot(actions['Dividends'].dropna(), bins=30, kde=True)
-    plt.title("Distribution of Dividends")
-    plt.xlabel("Dividends")
-    plt.ylabel("Frequency")
+    sns.histplot(df['TotalLiabilities'].dropna(), bins=30, kde=True)
+    plt.title('Distribution of TotalLiabilities')
+    plt.xlabel('TotalLiabilities')
+    plt.ylabel('Frequency')
     plt.show()
-
-    # Plot distribution of Stock Splits column
-    plt.figure(figsize=(10, 6))
-    sns.histplot(actions['Stock Splits'].dropna(), bins=30, kde=True)
-    plt.title("Distribution of Stock Splits")
-    plt.xlabel("Stock Splits")
-    plt.ylabel("Frequency")
-    plt.show()
-
-
-
 
 
     # # Correlation matrix
