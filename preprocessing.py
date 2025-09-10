@@ -33,6 +33,39 @@ load_dotenv()
 DATADIR = 'data/'
 
 
+def get_trading_data(ticker, spread_coeff=0.1, sigma_noise=0.001):
+    """
+    Prepare trading data for a given ticker.
+    We will create realistic trading prices based on OHLCV data.
+    Execution price = mid price + (spread/2) + slippage noise
+    No need to normalize prices, as this will be used for trading actions.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+    spread_coeff (float): Coefficient to estimate the bid-ask spread.
+    sigma_noise (float): Standard deviation of slippage noise.
+    Returns:
+    pd.DataFrame: A DataFrame containing the trading data.
+    """
+
+    file_path = os.path.join(DATADIR, f"{ticker}_ohlcv.csv")
+    df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date')
+    df = df.sort_index()
+
+    trading_df = pd.DataFrame(index=df.index)
+    trading_df['mid'] = (df['High'] + df['Low']) / 2
+    trading_df['spread_est'] = spread_coeff * (df['High'] - df['Low']) / trading_df['mid']
+
+    np.random.seed(42)  # For reproducibility
+    noise = np.random.normal(0, sigma_noise, size=len(df))
+
+    trading_df['execution_price'] = trading_df['mid'] + (trading_df['spread_est']/2) + noise
+    trading_df['execution_price'] = trading_df['execution_price'].clip(lower=0)
+
+    trading_df['trading_price'] = (df['High'] + df['Low'] + 2 * df['Close']) / 4
+
+    return trading_df[['execution_price']]
+
 def preprocess_ohclv(ticker):
     """
     Preprocess OHLCV data for a given ticker.
@@ -203,46 +236,9 @@ if __name__ == "__main__":
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
     # EDA
-    sentiment_df = preprocess_sentiment(ticker)
-    print(sentiment_df.head())
-    print(sentiment_df.info())
-    print(sentiment_df.describe())
-    # Null values
-    print("Null values in sentiment data:")
-    print(sentiment_df.isnull().sum())
-    # Duplicate dates
-    duplicate_dates = sentiment_df.index[sentiment_df.index.duplicated()].unique()
-    if not duplicate_dates.empty:
-        print("Duplicate dates found in sentiment data:")
-        print(duplicate_dates)
-    # Index is sorted
-    if sentiment_df.index.is_monotonic_increasing:
-        print("Index is sorted in ascending order.")
-    else:
-        print("Index is not sorted")
-    # Check date range
-    print(f"Date range in sentiment data: {sentiment_df.index.min()} to {sentiment_df.index.max()}")
-    # Outliers in sentiment scores
-    z_scores = np.abs(stats.zscore(sentiment_df['sentiment_score']))
-    outliers = sentiment_df[z_scores > 3]
-    print(f"Number of outliers in sentiment scores: {len(outliers)}")
-
-
-    # Distribution of sentiment scores
-    plt.figure(figsize=(10, 6))
-    sns.histplot(sentiment_df['sentiment_score'], bins=30, kde=True)
-    plt.title("Distribution of Sentiment Scores")
-    plt.xlabel("Sentiment Score")
-    plt.ylabel("Frequency")
-    plt.show()
-
-    # Distribution of smoothed sentiment scores
-    plt.figure(figsize=(10, 6))
-    sns.histplot(sentiment_df['sentiment_score_smoothed'], bins=30, kde=True)
-    plt.title("Distribution of Smoothed Sentiment Scores")
-    plt.xlabel("Smoothed Sentiment Score")
-    plt.ylabel("Frequency")
-    plt.show()
+    trading_df = get_trading_data(ticker)
+    print(trading_df.head())
+    print(trading_df.info())
 
 
 
