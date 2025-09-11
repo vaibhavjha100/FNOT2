@@ -32,6 +32,7 @@ from scipy.stats import zscore
 load_dotenv()
 
 DATADIR = 'data/'
+FEATDIR = 'features/'
 
 
 def get_trading_data(ticker, spread_coeff=0.1, sigma_noise=0.001):
@@ -442,45 +443,43 @@ def preprocess_macro(ticker):
 
     return df
 
+def merge_all_data(ticker):
+    """
+    Merge all preprocessed dataframes on Date index.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+    Returns:
+    pd.DataFrame: A merged DataFrame containing all features data.
+    """
+    df_ohlcv = preprocess_ohclv(ticker)
+    df_sentiment = preprocess_sentiment(ticker)
+    df_actions = preprocess_actions(ticker)
+    df_fundamentals = preprocess_fundamentals(ticker)
+    df_macro = preprocess_macro(ticker)
+
+    # Merge all dataframes on Date index
+    df_merged = df_ohlcv.join(df_sentiment, how='left', rsuffix='_sentiment')
+    df_merged = df_merged.join(df_actions, how='left', rsuffix='_actions')
+    df_merged = df_merged.join(df_fundamentals, how='left', rsuffix='_fundamentals')
+    df_merged = df_merged.join(df_macro, how='left', rsuffix='_macro')
+
+    # Fill any remaining NaN values with 0
+    df_merged = df_merged.fillna(0)
+
+    # Save to features directory
+    os.makedirs(FEATDIR, exist_ok=True)
+    df_merged.to_csv(os.path.join(FEATDIR, f"{ticker}_features_raw.csv"), index=True)
+    print(f"✅ Merged features data saved to: {os.path.join(FEATDIR, f'{ticker}_features_raw.csv')}")
+
+    return df_merged
+
 if __name__ == "__main__":
     # Load environment variables
     ticker = os.getenv('TICKER')
     start_date = os.getenv('START_DATE')
     end_date = os.getenv('END_DATE')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
-
-    # EDA
-    df = preprocess_macro(ticker)
-    print(df.head())
-    print(df.info())
-    print(df.describe().T)
-    # Null values
-    print("Null values in each column:")
-    print(df.isnull().sum())
-    # Duplicate rows
-    print(f"Number of duplicate rows: {df.duplicated().sum()}")
-    # Date range
-    print(f"Date range: {df.index.min()} to {df.index.max()}")
-    # Are dates sorted?
-    print(f"Dates sorted: {df.index.is_monotonic_increasing}")
-    # Outliers detection using Z-score
-    z_scores = np.abs(stats.zscore(df.select_dtypes(include=[np.number]), nan_policy='omit'))
-    outliers = (z_scores > 3).any(axis=1)
-    print(f"Number of outlier rows (Z-score > 3): {outliers.sum()}")
-
-    # Find if there are any columns that are non-numeric
-    non_numeric_cols = df.select_dtypes(exclude=[np.number]).columns
-    print(f"Non-numeric columns: {non_numeric_cols.tolist()}")
-
-    # Time series plot for Cash Deposit Ratio (%)
-    plt.figure(figsize=(12, 6))
-    if 'Cash Deposit Ratio (%)' in df.columns:
-        plt.plot(df.index, df['Cash Deposit Ratio (%)'], label='Cash Deposit Ratio (%)')
-        plt.title('Cash Deposit Ratio (%) Over Time')
-        plt.xlabel('Date')
-        plt.ylabel('Cash Deposit Ratio (%)')
-        plt.legend()
-        plt.show()
 
     # # Correlation matrix
     # corr_matrix = df.corr()
