@@ -28,14 +28,14 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
 from scipy.stats import zscore
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
 
 load_dotenv()
 
-DATADIR = 'data/'
-FEATDIR = 'features/'
 
-
-def get_trading_data(ticker, spread_coeff=0.1, sigma_noise=0.001):
+def get_trading_data(ticker, datadir='data/', spread_coeff=0.1, sigma_noise=0.001):
     """
     Prepare trading data for a given ticker.
     We will create realistic trading prices based on OHLCV data.
@@ -44,13 +44,14 @@ def get_trading_data(ticker, spread_coeff=0.1, sigma_noise=0.001):
 
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the OHLCV data is stored.
     spread_coeff (float): Coefficient to estimate the bid-ask spread.
     sigma_noise (float): Standard deviation of slippage noise.
     Returns:
     pd.DataFrame: A DataFrame containing the trading data.
     """
 
-    file_path = os.path.join(DATADIR, f"{ticker}_ohlcv.csv")
+    file_path = os.path.join(datadir, f"{ticker}_ohlcv.csv")
     df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date')
     df = df.sort_index()
 
@@ -68,32 +69,34 @@ def get_trading_data(ticker, spread_coeff=0.1, sigma_noise=0.001):
 
     return trading_df[['execution_price']]
 
-def get_ohlcv_index(ticker):
+def get_ohlcv_index(ticker, datadir='data/'):
     """
     Get the OHLCV data index for a given ticker.
 
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the OHLCV data is stored.
 
     Returns:
     pd.DatetimeIndex: The index of the OHLCV DataFrame.
     """
-    file_path = os.path.join(DATADIR, f"{ticker}_ohlcv.csv")
+    file_path = os.path.join(datadir, f"{ticker}_ohlcv.csv")
     df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
     return df.index
 
-def preprocess_ohclv(ticker):
+def preprocess_ohclv(ticker, datadir='data/'):
     """
     Preprocess OHLCV data for a given ticker.
     Create technical indicators as features.
 
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the OHLCV data is stored.
 
     Returns:
     pd.DataFrame: A preprocessed DataFrame containing the OHLCV data.
     """
-    file_path = os.path.join(DATADIR, f"{ticker}_ohlcv.csv")
+    file_path = os.path.join(datadir, f"{ticker}_ohlcv.csv")
     df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
 
     # Compute returns
@@ -171,11 +174,12 @@ def preprocess_ohclv(ticker):
 
     return df
 
-def get_sentiment(ticker: str, df: pd.DataFrame=None, text_column: str='body', gemini_api_key: str=None, start_date: str|datetime|date=None, end_date: str|datetime|date=None, aggregation_method: str='weighted_mean', sentiment_col: str='compound'):
+def get_sentiment(ticker: str, datadir = 'data/',df: pd.DataFrame=None, text_column: str='body', gemini_api_key: str=None, start_date: str|datetime|date=None, end_date: str|datetime|date=None, aggregation_method: str='weighted_mean', sentiment_col: str='compound'):
     """
     Perform sentiment analysis using finsenti.
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the data is stored.
     df (pd.DataFrame): DataFrame containing news data. If None, data will be loaded from 'data/news.csv'.
     text_column (str): The column name containing the news text.
     gemini_api_key (str): API key for finsenti.
@@ -190,7 +194,7 @@ def get_sentiment(ticker: str, df: pd.DataFrame=None, text_column: str='body', g
     from finsenti import finsenti_pipeline
 
     if df is None:
-        file_path = os.path.join(DATADIR, 'news.csv')
+        file_path = os.path.join(datadir, 'news.csv')
         df = pd.read_csv(file_path, parse_dates=['date'], index_col='date').sort_index()
 
     # Filter by date range
@@ -204,21 +208,22 @@ def get_sentiment(ticker: str, df: pd.DataFrame=None, text_column: str='body', g
     sent_df = finsenti_pipeline(tickers=tickers, df=df, text_column=text_column, gemini_api_key=gemini_api_key, aggregation_method=aggregation_method, sentiment_col=sentiment_col)
 
     # Save to CSV
-    sent_df.to_csv(os.path.join(DATADIR, f"{ticker}_sentiment.csv"), index=True)
-    print(f"✅ Sentiment data saved to: {os.path.join(DATADIR, f'{ticker}_sentiment.csv')}")
+    sent_df.to_csv(os.path.join(datadir, f"{ticker}_sentiment.csv"), index=True)
+    print(f"✅ Sentiment data saved to: {os.path.join(datadir, f'{ticker}_sentiment.csv')}")
     return sent_df
 
-def preprocess_sentiment(ticker):
+def preprocess_sentiment(ticker, datadir='data/'):
     """
     Preprocess sentiment data.
     Create additional features if needed.
 
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the sentiment data is stored.
     Returns:
     pd.DataFrame: A preprocessed DataFrame containing the sentiment data.
     """
-    file_path = os.path.join(DATADIR, f"{ticker}_sentiment.csv")
+    file_path = os.path.join(datadir, f"{ticker}_sentiment.csv")
     df = pd.read_csv(file_path).sort_index()
 
     # Check if 'date' column exists for setting index
@@ -247,7 +252,7 @@ def preprocess_sentiment(ticker):
 
     return df
 
-def preprocess_actions(ticker):
+def preprocess_actions(ticker, datadir='data/'):
     """
     Preprocess actions data for a given ticker.
     Actions data is assumed to be in 'data/{ticker}_actions.csv'.
@@ -258,7 +263,7 @@ def preprocess_actions(ticker):
     Returns:
     pd.DataFrame: A preprocessed DataFrame containing the actions data.
     """
-    file_path = os.path.join(DATADIR, f"{ticker}_actions.csv")
+    file_path = os.path.join(datadir, f"{ticker}_actions.csv")
     df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
 
     idx = get_ohlcv_index(ticker)
@@ -285,7 +290,7 @@ def preprocess_actions(ticker):
 
     return actions
 
-def preprocess_fundamentals(ticker):
+def preprocess_fundamentals(ticker, datadir='data/'):
     """
     Preprocess balance sheet, profit loss and cash flow data for a given ticker.
     Balance sheet data is assumed to be in 'data/{ticker}_balance_sheet.csv'.
@@ -295,20 +300,21 @@ def preprocess_fundamentals(ticker):
 
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the fundamentals data is stored.
 
     Returns:
     pd.DataFrame: A preprocessed DataFrame containing the fundamentals data.
     """
-    file_path_bs = os.path.join(DATADIR, f"{ticker}_balance_sheet.csv")
+    file_path_bs = os.path.join(datadir, f"{ticker}_balance_sheet.csv")
     df_bs = pd.read_csv(file_path_bs).sort_index()
 
-    file_path_pl = os.path.join(DATADIR, f"{ticker}_profit_loss.csv")
+    file_path_pl = os.path.join(datadir, f"{ticker}_profit_loss.csv")
     df_pl = pd.read_csv(file_path_pl).sort_index()
 
-    file_path_cf = os.path.join(DATADIR, f"{ticker}_cash_flows.csv")
+    file_path_cf = os.path.join(datadir, f"{ticker}_cash_flows.csv")
     df_cf = pd.read_csv(file_path_cf).sort_index()
 
-    file_path_ra = os.path.join(DATADIR, f"{ticker}_ratios.csv")
+    file_path_ra = os.path.join(datadir, f"{ticker}_ratios.csv")
     df_ra = pd.read_csv(file_path_ra).sort_index()
 
 
@@ -381,16 +387,17 @@ def preprocess_fundamentals(ticker):
 
     return df
 
-def preprocess_macro(ticker):
+def preprocess_macro(ticker, datadir='data/'):
     """
     Preprocess macroeconomic data.
 
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the macroeconomic data is stored.
     Returns:
     pd.DataFrame: A preprocessed DataFrame containing the macroeconomic data.
     """
-    file_paths = [os.path.join(DATADIR, f) for f in os.listdir(DATADIR) if f.endswith('_macro.csv')]
+    file_paths = [os.path.join(datadir, f) for f in os.listdir(datadir) if f.endswith('_macro.csv')]
     macro_dfs = []
 
     for file_path in file_paths:
@@ -443,20 +450,22 @@ def preprocess_macro(ticker):
 
     return df
 
-def merge_all_data(ticker):
+def merge_all_data(ticker, datadir='data/', featdir='features/'):
     """
     Merge all preprocessed dataframes on Date index.
 
     Parameters:
     ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the data is stored.
+    featdir (str): Directory where the merged features data will be saved.
     Returns:
     pd.DataFrame: A merged DataFrame containing all features data.
     """
-    df_ohlcv = preprocess_ohclv(ticker)
-    df_sentiment = preprocess_sentiment(ticker)
-    df_actions = preprocess_actions(ticker)
-    df_fundamentals = preprocess_fundamentals(ticker)
-    df_macro = preprocess_macro(ticker)
+    df_ohlcv = preprocess_ohclv(ticker, datadir=datadir)
+    df_sentiment = preprocess_sentiment(ticker, datadir=datadir)
+    df_actions = preprocess_actions(ticker, datadir=datadir)
+    df_fundamentals = preprocess_fundamentals(ticker, datadir=datadir)
+    df_macro = preprocess_macro(ticker, datadir=datadir)
 
     # Merge all dataframes on Date index
     df_merged = df_ohlcv.join(df_sentiment, how='left', rsuffix='_sentiment')
@@ -468,11 +477,54 @@ def merge_all_data(ticker):
     df_merged = df_merged.fillna(0)
 
     # Save to features directory
-    os.makedirs(FEATDIR, exist_ok=True)
-    df_merged.to_csv(os.path.join(FEATDIR, f"{ticker}_features_raw.csv"), index=True)
-    print(f"✅ Merged features data saved to: {os.path.join(FEATDIR, f'{ticker}_features_raw.csv')}")
+    os.makedirs(featdir, exist_ok=True)
+    df_merged.to_csv(os.path.join(featdir, f"{ticker}_features_raw.csv"), index=True)
+    print(f"✅ Merged features data saved to: {os.path.join(featdir, f'{ticker}_features_raw.csv')}")
 
     return df_merged
+
+def train_test_save(ticker, test_size=0.2, featdir='features/', datadir='data/'):
+    """
+    Split the dataframe into training and testing sets based on date.
+    Keep the temporal order intact.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+    featdir (str): Directory where the features data is stored.
+    datadir (str): Directory where the data is stored.
+    test_size (float): The proportion of the dataset to include in the test split.
+
+    Returns:
+    """
+
+    df = pd.read_csv(os.path.join(featdir, f"{ticker}_features_raw.csv"), parse_dates=['Date'], index_col='Date').sort_index()
+    tp = get_trading_data(ticker, datadir=datadir)
+
+    # Align indices
+    df, tp = df.align(tp, join="inner", axis=0)
+
+    # Split with temporal order intact
+    x_train, x_test, y_train, y_test = train_test_split(df, tp, test_size=test_size, shuffle=False)
+
+    # Get date ranges
+    train_start_date = x_train.index.min().strftime('%Y-%m-%d')
+    train_end_date = x_train.index.max().strftime('%Y-%m-%d')
+    test_start_date = x_test.index.min().strftime('%Y-%m-%d')
+    test_end_date = x_test.index.max().strftime('%Y-%m-%d')
+
+    print(f"Training set: {train_start_date} to {train_end_date}, {len(x_train)} samples")
+    print(f"Testing set: {test_start_date} to {test_end_date}, {len(x_test)} samples")
+
+    # Save to features directory
+    os.makedirs(featdir, exist_ok=True)
+    x_train.to_csv(os.path.join(featdir, f"{ticker}_X_train_raw.csv"), index=True)
+    x_test.to_csv(os.path.join(featdir, f"{ticker}_X_test_raw.csv"), index=True)
+    y_train.to_csv(os.path.join(featdir, f"{ticker}_y_train.csv"), index=True)
+    y_test.to_csv(os.path.join(featdir, f"{ticker}_y_test.csv"), index=True)
+    print(f"✅ Train-test split data saved to: {featdir}")
+
+    return x_train, x_test, y_train, y_test
+
 
 if __name__ == "__main__":
     # Load environment variables
@@ -481,20 +533,8 @@ if __name__ == "__main__":
     end_date = os.getenv('END_DATE')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
-    # # Correlation matrix
-    # corr_matrix = df.corr()
-    # print("Correlation matrix of OHLCV data:")
-    # # Partial display of correlation matrix
-    # print(corr_matrix.iloc[:10, :10])
-    # # Check and make pairs for highly correlated features
-    # threshold = 0.8
-    # correlated_pairs = [(col1, col2) for col1 in corr_matrix.columns for col2 in corr_matrix.columns
-    #                     if col1 != col2 and abs(corr_matrix.loc[col1, col2]) > threshold]
-    # print(f"Highly correlated feature pairs (|correlation| > {threshold}):")
-    # for pair in correlated_pairs:
-    #     print(pair)
-    #
-    # plt.figure(figsize=(12, 8))
-    # sns.heatmap(df.corr(), cmap="coolwarm", center=0)
-    # plt.title("Feature Correlation Heatmap")
-    # plt.show()
+    x_train, x_test, y_train, y_test = train_test_save(ticker, test_size=0.2, featdir='features/', datadir='data/')
+    print(x_train.head())
+    print(y_train.head())
+    print(x_test.head())
+    print(y_test.head())
