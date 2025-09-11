@@ -3,14 +3,16 @@ Module for preprocessing features data for reinforcement learning models.
 
 Our normalization strategy: z-score normalization for most features (done at individual feature level).
 
+Trading data is prepared from OHLCV data to create realistic trading prices.
+Trading prices (execution_price) are not normalized, as they will be used for trading actions.
+
+
 List of preprocessing files:
 1. OHLCV data preprocessing
 2. Sentiment Analysis using finsenti -> Sentiment data preprocessing
 3. Actions data preprocessing
-4. Fundamentals data preprocessing (Balance Sheet, Profit Loss, Cash Flow)
+4. Fundamentals data preprocessing (Balance Sheet, Profit Loss, Cash Flow, Ratios)
 5. Macroeconomic data preprocessing (Daily/Weekly/Fortnightly/Monthly/Quarterly)
-6. Ratio data preprocessing
-7. Trading data preprocessing (execution price, trading price)
 
 After preprocessing, merge all dataframes on Date index.
 
@@ -288,6 +290,7 @@ def preprocess_fundamentals(ticker):
     Balance sheet data is assumed to be in 'data/{ticker}_balance_sheet.csv'.
     Profit loss data is assumed to be in 'data/{ticker}_profit_loss.csv'.
     Cash flow data is assumed to be in 'data/{ticker}_cash_flows.csv'.
+    Ratios data is assumed to be in 'data/{ticker}_ratios.csv'.
 
     Parameters:
     ticker (str): The stock ticker symbol.
@@ -303,6 +306,9 @@ def preprocess_fundamentals(ticker):
 
     file_path_cf = os.path.join(DATADIR, f"{ticker}_cash_flows.csv")
     df_cf = pd.read_csv(file_path_cf).sort_index()
+
+    file_path_ra = os.path.join(DATADIR, f"{ticker}_ratios.csv")
+    df_ra = pd.read_csv(file_path_ra).sort_index()
 
 
     # Check if Unnamed: 0 column exists and set it as index if it does and rename it to 'Date'
@@ -322,6 +328,11 @@ def preprocess_fundamentals(ticker):
         df_cf.set_index('Unnamed: 0', inplace=True)
         df_cf.index.name = 'Date'
 
+    if 'Unnamed: 0' in df_ra.columns:
+        df_ra['Unnamed: 0'] = pd.to_datetime(df_ra['Unnamed: 0'], format='%Y')
+        df_ra.set_index('Unnamed: 0', inplace=True)
+        df_ra.index.name = 'Date'
+
     df_bs.index = pd.to_datetime(df_bs.index)
     df_bs.sort_index(inplace=True)
 
@@ -331,9 +342,13 @@ def preprocess_fundamentals(ticker):
     df_cf.index = pd.to_datetime(df_cf.index)
     df_cf.sort_index(inplace=True)
 
-    # Merge all three dataframes on Date index
+    df_ra.index = pd.to_datetime(df_ra.index)
+    df_ra.sort_index(inplace=True)
+
+    # Merge all four dataframes on Date index
     df = pd.merge(df_bs, df_pl, left_index=True, right_index=True, how='outer', suffixes=('_bs', '_pl'))
     df = pd.merge(df, df_cf, left_index=True, right_index=True, how='outer', suffixes=('', '_cf'))
+    df = pd.merge(df, df_ra, left_index=True, right_index=True, how='outer', suffixes=('', '_ra'))
 
     # Resample to daily frequency using forward fill
     df = df.resample('D').ffill()
@@ -365,6 +380,68 @@ def preprocess_fundamentals(ticker):
 
     return df
 
+def preprocess_macro(ticker):
+    """
+    Preprocess macroeconomic data.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+    Returns:
+    pd.DataFrame: A preprocessed DataFrame containing the macroeconomic data.
+    """
+    file_paths = [os.path.join(DATADIR, f) for f in os.listdir(DATADIR) if f.endswith('_macro.csv')]
+    macro_dfs = []
+
+    for file_path in file_paths:
+        df = pd.read_csv(file_path).sort_index()
+
+        if "Reporting Date" in df.columns:
+            df['Reporting Date'] = pd.to_datetime(df['Reporting Date'])
+            df.set_index('Reporting Date', inplace=True)
+        elif 'Unnamed: 0' in df.columns:
+            df['Unnamed: 0'] = pd.to_datetime(df['Unnamed: 0'])
+            df.set_index('Unnamed: 0', inplace=True)
+        elif 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'])
+            df.set_index('Date', inplace=True)
+        elif 'Period' in df.columns:
+            df['Period'] = pd.to_datetime(df['Period'])
+            df.set_index('Period', inplace=True)
+        # Rename index to Date
+        df.index.name = 'Date'
+
+        df = df[~df.index.duplicated(keep='last')]
+
+        # Replace 'wh' with NaN
+        df = df.replace("wh", np.nan)
+
+        # Convert all columns to numeric, coerce errors to NaN
+        df = df.apply(pd.to_numeric, errors='coerce')
+
+        # Resample to daily frequency using forward/backward fill
+        df = df.resample('D').ffill().bfill()
+
+        macro_dfs.append(df)
+
+    # Merge all macro dataframes on Date index
+    df_merged = pd.concat(macro_dfs, axis=1)
+
+    # Final forward/backward fill just in case of alignment gaps
+    df_merged = df_merged.ffill().bfill()
+
+    # Reindex to OHLCV date index (assuming at least one ticker's OHLCV data is present)
+    ohlcv_index = get_ohlcv_index(ticker)
+    df = df_merged.reindex(ohlcv_index, method='ffill')
+
+    # Fill any remaining NaN values with 0
+    df = df.fillna(0)
+
+    # Normalize all numeric columns with Z-score
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    df[numeric_cols] = df[numeric_cols].apply(zscore)
+
+    return df
+
 if __name__ == "__main__":
     # Load environment variables
     ticker = os.getenv('TICKER')
@@ -373,7 +450,7 @@ if __name__ == "__main__":
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
     # EDA
-    df = preprocess_fundamentals(ticker)
+    df = preprocess_macro(ticker)
     print(df.head())
     print(df.info())
     print(df.describe().T)
@@ -391,14 +468,19 @@ if __name__ == "__main__":
     outliers = (z_scores > 3).any(axis=1)
     print(f"Number of outlier rows (Z-score > 3): {outliers.sum()}")
 
-    # Distribution plots for TotalLiabilities
-    plt.figure(figsize=(10, 6))
-    sns.histplot(df['TotalLiabilities'].dropna(), bins=30, kde=True)
-    plt.title('Distribution of TotalLiabilities')
-    plt.xlabel('TotalLiabilities')
-    plt.ylabel('Frequency')
-    plt.show()
+    # Find if there are any columns that are non-numeric
+    non_numeric_cols = df.select_dtypes(exclude=[np.number]).columns
+    print(f"Non-numeric columns: {non_numeric_cols.tolist()}")
 
+    # Time series plot for Cash Deposit Ratio (%)
+    plt.figure(figsize=(12, 6))
+    if 'Cash Deposit Ratio (%)' in df.columns:
+        plt.plot(df.index, df['Cash Deposit Ratio (%)'], label='Cash Deposit Ratio (%)')
+        plt.title('Cash Deposit Ratio (%) Over Time')
+        plt.xlabel('Date')
+        plt.ylabel('Cash Deposit Ratio (%)')
+        plt.legend()
+        plt.show()
 
     # # Correlation matrix
     # corr_matrix = df.corr()
