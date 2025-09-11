@@ -7,11 +7,10 @@ List of preprocessing files:
 1. OHLCV data preprocessing
 2. Sentiment Analysis using finsenti -> Sentiment data preprocessing
 3. Actions data preprocessing
-4. Balance Sheet data preprocessing
-5. Cash Flow data preprocessing
-6. Income Statement data preprocessing
-7. Macroeconomic data preprocessing (Daily/Weekly/Fortnightly/Monthly/Quarterly)
-8. Ratio data preprocessing
+4. Fundamentals data preprocessing (Balance Sheet, Profit Loss, Cash Flow)
+5. Macroeconomic data preprocessing (Daily/Weekly/Fortnightly/Monthly/Quarterly)
+6. Ratio data preprocessing
+7. Trading data preprocessing (execution price, trading price)
 
 After preprocessing, merge all dataframes on Date index.
 
@@ -283,29 +282,86 @@ def preprocess_actions(ticker):
 
     return actions
 
-def preprocess_balance_sheet(ticker):
+def preprocess_fundamentals(ticker):
     """
-    Preprocess balance sheet data for a given ticker.
+    Preprocess balance sheet, profit loss and cash flow data for a given ticker.
     Balance sheet data is assumed to be in 'data/{ticker}_balance_sheet.csv'.
+    Profit loss data is assumed to be in 'data/{ticker}_profit_loss.csv'.
+    Cash flow data is assumed to be in 'data/{ticker}_cash_flows.csv'.
 
     Parameters:
     ticker (str): The stock ticker symbol.
 
     Returns:
-    pd.DataFrame: A preprocessed DataFrame containing the balance sheet data.
+    pd.DataFrame: A preprocessed DataFrame containing the fundamentals data.
     """
-    file_path = os.path.join(DATADIR, f"{ticker}_balance_sheet.csv")
-    df = pd.read_csv(file_path).sort_index()
+    file_path_bs = os.path.join(DATADIR, f"{ticker}_balance_sheet.csv")
+    df_bs = pd.read_csv(file_path_bs).sort_index()
+
+    file_path_pl = os.path.join(DATADIR, f"{ticker}_profit_loss.csv")
+    df_pl = pd.read_csv(file_path_pl).sort_index()
+
+    file_path_cf = os.path.join(DATADIR, f"{ticker}_cash_flows.csv")
+    df_cf = pd.read_csv(file_path_cf).sort_index()
+
 
     # Check if Unnamed: 0 column exists and set it as index if it does and rename it to 'Date'
     # For fundamentals data, the dates are years, not in datetime format (for example, 2020)
-    if 'Unnamed: 0' in df.columns:
-        df['Unnamed: 0'] = pd.to_datetime(df['Unnamed: 0'], format='%Y')
-        df.set_index('Unnamed: 0', inplace=True)
-        df.index.name = 'Date'
+    if 'Unnamed: 0' in df_bs.columns:
+        df_bs['Unnamed: 0'] = pd.to_datetime(df_bs['Unnamed: 0'], format='%Y')
+        df_bs.set_index('Unnamed: 0', inplace=True)
+        df_bs.index.name = 'Date'
 
-    df.index = pd.to_datetime(df.index)
-    df.sort_index(inplace=True)
+    if 'Unnamed: 0' in df_pl.columns:
+        df_pl['Unnamed: 0'] = pd.to_datetime(df_pl['Unnamed: 0'], format='%Y')
+        df_pl.set_index('Unnamed: 0', inplace=True)
+        df_pl.index.name = 'Date'
+
+    if 'Unnamed: 0' in df_cf.columns:
+        df_cf['Unnamed: 0'] = pd.to_datetime(df_cf['Unnamed: 0'], format='%Y')
+        df_cf.set_index('Unnamed: 0', inplace=True)
+        df_cf.index.name = 'Date'
+
+    df_bs.index = pd.to_datetime(df_bs.index)
+    df_bs.sort_index(inplace=True)
+
+    df_pl.index = pd.to_datetime(df_pl.index)
+    df_pl.sort_index(inplace=True)
+
+    df_cf.index = pd.to_datetime(df_cf.index)
+    df_cf.sort_index(inplace=True)
+
+    # Merge all three dataframes on Date index
+    df = pd.merge(df_bs, df_pl, left_index=True, right_index=True, how='outer', suffixes=('_bs', '_pl'))
+    df = pd.merge(df, df_cf, left_index=True, right_index=True, how='outer', suffixes=('', '_cf'))
+
+    # Resample to daily frequency using forward fill
+    df = df.resample('D').ffill()
+
+    # Set to OHLCV date index
+    ohlcv_index = get_ohlcv_index(ticker)
+    df = df.reindex(ohlcv_index, method='ffill')
+
+    # Add Ratios as features
+    ratios = {}
+    eps = 1e-9
+    if "NetProfit" in df.columns and "Sales" in df.columns:
+        ratios["NetMargin"] = df["NetProfit"] / (df["Sales"] + eps)
+    if "OperatingProfit" in df.columns and "Sales" in df.columns:
+        ratios["OperatingMargin"] = df["OperatingProfit"] / (df["Sales"] + eps)
+    if "Borrowings" in df.columns and "EquityCapital" in df.columns:
+        ratios["Leverage"] = df["Borrowings"] / (df["EquityCapital"] + eps)
+    if "CashEquivalents" in df.columns and "TotalLiabilities" in df.columns:
+        ratios["CashToDebt"] = df["CashEquivalents"] / (df["TotalLiabilities"] + eps)
+    if "Sales" in df.columns and "TotalAssets" in df.columns:
+        ratios["AssetTurnover"] = df["Sales"] / (df["TotalAssets"] + eps)
+
+    ratios_df = pd.DataFrame(ratios, index=df.index)
+    df = pd.concat([df, ratios_df], axis=1)
+
+    # Normalize all numeric columns with Z-score
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    df[numeric_cols] = df[numeric_cols].apply(zscore)
 
     return df
 
@@ -317,7 +373,7 @@ if __name__ == "__main__":
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
     # EDA
-    df = preprocess_balance_sheet(ticker)
+    df = preprocess_fundamentals(ticker)
     print(df.head())
     print(df.info())
     print(df.describe().T)
