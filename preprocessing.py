@@ -16,10 +16,9 @@ List of preprocessing files:
 
 After preprocessing, merge all dataframes on Date index.
 
-The merged dataframe will be used to build sequences for LSTM-DDPG model.
+The merged dataframe along with trading return will be used to build sequences for LSTM-DDPG model.
 The sequences will then be split into training and testing sets.
 At last, PCA can be applied for dimensionality reduction with standardization.
-Standardize y values (trading prices) and save the scaler for inverse transformation during trading.
 """
 
 import pandas as pd
@@ -504,13 +503,15 @@ def build_sequences(ticker, seq_length=60, datadir='data/', featdir='features/')
 
     tp = get_trading_data(ticker, datadir=datadir)
 
+    returns = tp.pct_change().shift(-1).dropna()
+
     # Align indices
-    df, tp = df.align(tp, join="inner", axis=0)
+    df, returns = df.align(returns, join="inner", axis=0)
 
     x,y,dates = [],[],[]
 
     feature_array = df.values
-    target_array = tp.values.flatten()
+    target_array = returns.values.flatten()
     date_array = df.index
 
     for i in range(seq_length, len(df)):
@@ -528,6 +529,8 @@ def build_sequences(ticker, seq_length=60, datadir='data/', featdir='features/')
     np.save(os.path.join(featdir, f"{ticker}_y_raw.npy"), y)
     np.save(os.path.join(featdir, f"{ticker}_dates.npy"), dates)
 
+    print(f"✅ Sequences data saved to: {featdir}")
+
     return x, y, dates
 
 def train_test_save(ticker, test_size=0.2, featdir='features/', datadir='data/'):
@@ -544,30 +547,29 @@ def train_test_save(ticker, test_size=0.2, featdir='features/', datadir='data/')
     Returns:
     """
 
-    df = pd.read_csv(os.path.join(featdir, f"{ticker}_features_raw.csv"), parse_dates=['Date'], index_col='Date').sort_index()
-    tp = get_trading_data(ticker, datadir=datadir)
-
-    # Align indices
-    df, tp = df.align(tp, join="inner", axis=0)
+    x = np.load(os.path.join(featdir, f"{ticker}_x_raw.npy"))
+    y = np.load(os.path.join(featdir, f"{ticker}_y_raw.npy"))
+    dates = np.load(os.path.join(featdir, f"{ticker}_dates.npy"), allow_pickle=True)
 
     # Split with temporal order intact
-    x_train, x_test, y_train, y_test = train_test_split(df, tp, test_size=test_size, shuffle=False)
+    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=test_size, shuffle=False)
 
     # Get date ranges
-    train_start_date = x_train.index.min().strftime('%Y-%m-%d')
-    train_end_date = x_train.index.max().strftime('%Y-%m-%d')
-    test_start_date = x_test.index.min().strftime('%Y-%m-%d')
-    test_end_date = x_test.index.max().strftime('%Y-%m-%d')
+    train_dates = dates[:len(x_train)]
+    test_dates = dates[len(x_train):]
 
-    print(f"Training set: {train_start_date} to {train_end_date}, {len(x_train)} samples")
-    print(f"Testing set: {test_start_date} to {test_end_date}, {len(x_test)} samples")
+    print(f"Training set: {len(x_train)} samples, Date range: {train_dates[0]} to {train_dates[-1]}")
+    print(f"Testing set: {len(x_test)} samples, Date range: {test_dates[0]} to {test_dates[-1]}")
 
     # Save to features directory
     os.makedirs(featdir, exist_ok=True)
-    x_train.to_csv(os.path.join(featdir, f"{ticker}_X_train_raw.csv"), index=True)
-    x_test.to_csv(os.path.join(featdir, f"{ticker}_X_test_raw.csv"), index=True)
-    y_train.to_csv(os.path.join(featdir, f"{ticker}_y_train.csv"), index=True)
-    y_test.to_csv(os.path.join(featdir, f"{ticker}_y_test.csv"), index=True)
+    np.save(os.path.join(featdir, f"{ticker}_x_train_raw.npy"), x_train)
+    np.save(os.path.join(featdir, f"{ticker}_x_test_raw.npy"), x_test)
+    np.save(os.path.join(featdir, f"{ticker}_y_train.npy"), y_train)
+    np.save(os.path.join(featdir, f"{ticker}_y_test.npy"), y_test)
+    np.save(os.path.join(featdir, f"{ticker}_train_dates.npy"), train_dates)
+    np.save(os.path.join(featdir, f"{ticker}_test_dates.npy"), test_dates)
+
     print(f"✅ Train-test split data saved to: {featdir}")
 
     return x_train, x_test, y_train, y_test
@@ -580,14 +582,15 @@ if __name__ == "__main__":
     end_date = os.getenv('END_DATE')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
-    x, y, dates = build_sequences(ticker, seq_length=30, datadir='data/', featdir='features/')
+    x_train, x_test, y_train, y_test = train_test_save(ticker, test_size=0.2, featdir='features/', datadir='data/')
 
-    print(f"Feature sequences shape: {x.shape}")
-    print(f"Target values shape: {y.shape}")
-    print(f"Dates shape: {dates.shape}")
+    # Print data snapshots
+    print("x_train shape:", x_train.shape)
+    print("x_test shape:", x_test.shape)
+    print("y_train shape:", y_train.shape)
+    print("y_test shape:", y_test.shape)
 
-    # Print snapshot of the data for verification
-    print("Feature sequence sample (first sequence):")
-    print(pd.DataFrame(x[0], columns=[f"feat_{i}" for i in range(x.shape[2])]))
-    print("Corresponding target value (first sequence):", y[0])
-    print("Corresponding date (first sequence):", dates[0])
+    print("x_train sample:", x_train[0])
+    print("y_train sample:", y_train[0])
+    print("x_test sample:", x_test[0])
+    print("y_test sample:", y_test[0])
