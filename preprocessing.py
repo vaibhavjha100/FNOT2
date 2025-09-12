@@ -32,7 +32,9 @@ from scipy import stats
 from scipy.stats import zscore
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
+import pickle
 
 load_dotenv()
 
@@ -574,6 +576,108 @@ def train_test_save(ticker, test_size=0.2, featdir='features/', datadir='data/')
 
     return x_train, x_test, y_train, y_test
 
+def principal_component_analysis(ticker, n_components=0.95, featdir='features/', modeldir='models/'):
+    """
+    Apply PCA for dimensionality reduction with standardization.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+    n_components (int|float): Number of components to keep or variance ratio to retain.
+    featdir (str): Directory where the features data is stored.
+    modeldir (str): Directory where the PCA model will be saved.
+
+    Returns:
+    x_train_pca (np.ndarray): The PCA transformed feature sequences.
+    x_test_pca (np.ndarray): The PCA transformed feature sequences.
+    """
+
+    x_train = np.load(os.path.join(featdir, f"{ticker}_x_train_raw.npy"))
+    x_test = np.load(os.path.join(featdir, f"{ticker}_x_test_raw.npy"))
+
+    n_samples, seq_len, n_features = x_train.shape
+    print(f"Original feature dimension: {n_features}")
+
+    # Reshape to (samples*timesteps, features) for PCA
+    x_train_reshaped = x_train.reshape(-1, n_features)
+    x_test_reshaped = x_test.reshape(-1, n_features)
+
+    # PCA pipeline with standardization
+    pca_pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ('pca', PCA(n_components=n_components))
+    ])
+
+    # Fit PCA on training data
+    x_train_reduced = pca_pipeline.fit_transform(x_train_reshaped)
+    x_test_reduced = pca_pipeline.transform(x_test_reshaped)
+
+    # Reshape back to 3D
+    n_features_reduced = x_train_reduced.shape[1]
+    x_train_pca = x_train_reduced.reshape(n_samples, seq_len, n_features_reduced)
+    x_test_pca = x_test_reduced.reshape(x_test.shape[0], seq_len, n_features_reduced)
+
+    print(f"Reduced feature dimension: {n_features_reduced}")
+    print(f"x_train_pca shape: {x_train_pca.shape}")
+    print(f"x_test_pca shape: {x_test_pca.shape}")
+    explained_var = pca_pipeline.named_steps['pca'].explained_variance_ratio_.sum()
+    print(f"Total variance explained: {explained_var:.2%}")
+
+    # Save PCA transformed data and model
+    np.save(os.path.join(featdir, f"{ticker}_x_train.npy"), x_train_pca)
+    np.save(os.path.join(featdir, f"{ticker}_x_test.npy"), x_test_pca)
+    print(f"✅ PCA transformed data saved to: {featdir}")
+
+    os.makedirs(modeldir, exist_ok=True)
+    with open(os.path.join(modeldir, f"{ticker}_pca_model.pkl"), 'wb') as f:
+        pickle.dump(pca_pipeline, f)
+    print(f"✅ PCA model saved to: {os.path.join(modeldir, f'{ticker}_pca_model.pkl')}")
+
+    return x_train_pca, x_test_pca
+
+def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='models/', spread_coeff=0.1, sigma_noise=0.001, seq_length=60, test_size=0.2, n_components=0.95, new_sentiment=False,gemini_api_key=None, start_date=None, end_date=None):
+    """
+    Full preprocessing pipeline to prepare data for reinforcement learning models.
+
+    Parameters:
+    ticker (str): The stock ticker symbol.
+    datadir (str): Directory where the raw data is stored.
+    featdir (str): Directory where the features data will be saved.
+    modeldir (str): Directory where the PCA model will be saved.
+    spread_coeff (float): Coefficient to estimate the bid-ask spread.
+    sigma_noise (float): Standard deviation of slippage noise.
+    seq_length (int): The length of each sequence.
+    test_size (float): The proportion of the dataset to include in the test split.
+    n_components (int|float): Number of components to keep or variance ratio to retain.
+    new_sentiment (bool): Whether to fetch new sentiment data using finsenti.
+    gemini_api_key (str): API key for finsenti.
+    start_date (str|datetime|date): Start date for filtering news data.
+    end_date (str|datetime|date): End date for filtering news data.
+
+    Saves:
+    - x_train.npy, x_test.npy: PCA transformed feature sequences.
+    - y_train.npy, y_test.npy: Corresponding daily returns.
+    """
+    if new_sentiment:
+        get_sentiment(ticker, datadir=datadir, gemini_api_key=gemini_api_key, start_date=start_date, end_date=end_date)
+
+    # Prepare trading data (not saved, used internally)
+    _ = get_trading_data(ticker, datadir=datadir, spread_coeff=spread_coeff, sigma_noise=sigma_noise)
+
+    # Merge all preprocessed data
+    _ = merge_all_data(ticker, datadir=datadir, featdir=featdir)
+
+    # Build sequences
+    _ = build_sequences(ticker, seq_length=seq_length, datadir=datadir, featdir=featdir)
+
+    # Train-test split
+    _ = train_test_save(ticker, test_size=test_size, featdir=featdir, datadir=datadir)
+
+    # PCA for dimensionality reduction
+    x_train_pca, x_test_pca = principal_component_analysis(ticker, n_components=n_components, featdir=featdir, modeldir=modeldir)
+
+    print("✅ Full preprocessing pipeline completed.")
+
+
 
 if __name__ == "__main__":
     # Load environment variables
@@ -582,15 +686,10 @@ if __name__ == "__main__":
     end_date = os.getenv('END_DATE')
     gemini_api_key = os.getenv('GEMINI_API_KEY')
 
-    x_train, x_test, y_train, y_test = train_test_save(ticker, test_size=0.2, featdir='features/', datadir='data/')
+    # Check if ticker_sentiment file exists in data directory
+    datadir = 'data/'
+    sentiment_file = os.path.join(datadir, f"{ticker}_sentiment.csv")
+    new_sentiment = not os.path.exists(sentiment_file)
 
-    # Print data snapshots
-    print("x_train shape:", x_train.shape)
-    print("x_test shape:", x_test.shape)
-    print("y_train shape:", y_train.shape)
-    print("y_test shape:", y_test.shape)
-
-    print("x_train sample:", x_train[0])
-    print("y_train sample:", y_train[0])
-    print("x_test sample:", x_test[0])
-    print("y_test sample:", y_test[0])
+    # Run full preprocessing pipeline
+    preprocess_data(ticker=ticker, start_date=start_date, end_date=end_date, gemini_api_key=gemini_api_key, new_sentiment=new_sentiment)
