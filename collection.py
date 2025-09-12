@@ -155,8 +155,6 @@ def get_data(ticker, start, end, datadir='data'):
     print(actions.head())
     print(actions.info())
 
-
-
 if __name__ == "__main__":
     ticker = os.getenv('TICKER')
     start = os.getenv('START_DATE')
