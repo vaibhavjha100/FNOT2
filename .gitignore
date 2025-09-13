@@ -1,4 +1,6 @@
 data/
 features/
 models/
+fresh_data/
+temp/
 .env
