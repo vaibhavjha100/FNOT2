@@ -680,16 +680,17 @@ def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='mode
 
 
 if __name__ == "__main__":
-    # Load environment variables
-    ticker = os.getenv('TICKER')
-    start_date = os.getenv('START_DATE')
-    end_date = os.getenv('END_DATE')
-    gemini_api_key = os.getenv('GEMINI_API_KEY')
-
-    # Check if ticker_sentiment file exists in data directory
-    datadir = 'data/'
-    sentiment_file = os.path.join(datadir, f"{ticker}_sentiment.csv")
-    new_sentiment = not os.path.exists(sentiment_file)
-
-    # Run full preprocessing pipeline
-    preprocess_data(ticker=ticker, start_date=start_date, end_date=end_date, gemini_api_key=gemini_api_key, new_sentiment=new_sentiment)
+    # # Load environment variables
+    # ticker = os.getenv('TICKER')
+    # start_date = os.getenv('START_DATE')
+    # end_date = os.getenv('END_DATE')
+    # gemini_api_key = os.getenv('GEMINI_API_KEY')
+    #
+    # # Check if ticker_sentiment file exists in data directory
+    # datadir = 'data/'
+    # sentiment_file = os.path.join(datadir, f"{ticker}_sentiment.csv")
+    # new_sentiment = not os.path.exists(sentiment_file)
+    #
+    # # Run full preprocessing pipeline
+    # preprocess_data(ticker=ticker, start_date=start_date, end_date=end_date, gemini_api_key=gemini_api_key, new_sentiment=new_sentiment)
+    pass
