@@ -32,6 +32,7 @@ def collect_ohlcv(ticker, start, end, datadir='data'):
     if not os.path.exists(datadir):
         os.makedirs(datadir)
     df.to_csv(f'{datadir}/{ticker}_ohlcv.csv', index=True)
+    print(f"✅ OHLCV data collected and saved to: {datadir}/{ticker}_ohlcv.csv")
     return df
 
 def collect_news(start, end, datadir='data'):
@@ -49,7 +50,7 @@ def collect_news(start, end, datadir='data'):
     news_df = scrape_economic_times(start, end)
     if not os.path.exists(datadir):
         os.makedirs(datadir)
-    news_df.to_csv(f'{datadir}/news.csv', index=False)
+    news_df.to_csv(f'{datadir}/news.csv', index=True)
     print(f"✅ News data collected and saved to: {datadir}/news.csv")
     return news_df
 
