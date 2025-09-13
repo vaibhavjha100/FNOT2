@@ -634,7 +634,7 @@ def principal_component_analysis(ticker, n_components=0.95, featdir='features/',
 
     return x_train_pca, x_test_pca
 
-def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='models/', spread_coeff=0.1, sigma_noise=0.001, seq_length=60, test_size=0.2, n_components=0.95, new_sentiment=False,gemini_api_key=None, start_date=None, end_date=None):
+def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='models/', spread_coeff=0.1, sigma_noise=0.001, seq_length=60, test_size=0.2, n_components=0.95, new_sentiment=False,gemini_api_key=None, start_date=None, end_date=None, pca_new=True):
     """
     Full preprocessing pipeline to prepare data for reinforcement learning models.
 
@@ -652,6 +652,7 @@ def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='mode
     gemini_api_key (str): API key for finsenti.
     start_date (str|datetime|date): Start date for filtering news data.
     end_date (str|datetime|date): End date for filtering news data.
+    pca_new (bool): Whether to fit a new PCA model or load existing one.
 
     Saves:
     - x_train.npy, x_test.npy: PCA transformed feature sequences.
@@ -672,8 +673,32 @@ def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='mode
     # Train-test split
     _ = train_test_save(ticker, test_size=test_size, featdir=featdir, datadir=datadir)
 
-    # PCA for dimensionality reduction
-    x_train_pca, x_test_pca = principal_component_analysis(ticker, n_components=n_components, featdir=featdir, modeldir=modeldir)
+    if pca_new:
+        # PCA for dimensionality reduction
+        x_train_pca, x_test_pca = principal_component_analysis(ticker, n_components=n_components, featdir=featdir, modeldir=modeldir)
+    else:
+        # Load existing PCA model and transform data
+        with open(os.path.join(modeldir, f"{ticker}_pca_model.pkl"), 'rb') as f:
+            pca_pipeline = pickle.load(f)
+
+        x_train = np.load(os.path.join(featdir, f"{ticker}_x_train_raw.npy"))
+        x_test = np.load(os.path.join(featdir, f"{ticker}_x_test_raw.npy"))
+
+        n_samples, seq_len, n_features = x_train.shape
+        x_train_reshaped = x_train.reshape(-1, n_features)
+        x_test_reshaped = x_test.reshape(-1, n_features)
+
+        x_train_reduced = pca_pipeline.transform(x_train_reshaped)
+        x_test_reduced = pca_pipeline.transform(x_test_reshaped)
+
+        n_features_reduced = x_train_reduced.shape[1]
+        x_train_pca = x_train_reduced.reshape(n_samples, seq_len, n_features_reduced)
+        x_test_pca = x_test_reduced.reshape(x_test.shape[0], seq_len, n_features_reduced)
+
+        # Save PCA transformed data
+        np.save(os.path.join(featdir, f"{ticker}_x_train.npy"), x_train_pca)
+        np.save(os.path.join(featdir, f"{ticker}_x_test.npy"), x_test_pca)
+        print(f"✅ PCA transformed data saved to: {featdir}")
 
     print("✅ Full preprocessing pipeline completed.")
 
