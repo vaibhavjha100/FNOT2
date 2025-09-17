@@ -86,6 +86,9 @@ def get_ohlcv_index(ticker, datadir='data/'):
     """
     file_path = os.path.join(datadir, f"{ticker}_ohlcv.csv")
     df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
+    # Remove duplicate dates if any
+    df = df[~df.index.duplicated(keep='last')]
+
     return df.index
 
 def preprocess_ohclv(ticker, datadir='data/'):
@@ -102,6 +105,9 @@ def preprocess_ohclv(ticker, datadir='data/'):
     """
     file_path = os.path.join(datadir, f"{ticker}_ohlcv.csv")
     df = pd.read_csv(file_path, parse_dates=['Date'], index_col='Date').sort_index()
+
+    # Remove duplicate dates if any
+    df = df[~df.index.duplicated(keep='last')]
 
     # Compute returns
     df['return'] = df['Close'].pct_change()
@@ -242,6 +248,9 @@ def preprocess_sentiment(ticker, datadir='data/'):
 
     df.index = pd.to_datetime(df.index)
     df.sort_index(inplace=True)
+
+    # Remove duplicate dates if any
+    df = df[~df.index.duplicated(keep='last')]
 
     # Smooth sentiment scores with rolling mean
     df['sentiment_score_smoothed'] = df['sentiment_score'].ewm(span=5, adjust=False).mean()
