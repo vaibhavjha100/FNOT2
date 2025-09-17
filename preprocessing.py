@@ -334,22 +334,46 @@ def preprocess_fundamentals(ticker, datadir='data/'):
     # Check if Unnamed: 0 column exists and set it as index if it does and rename it to 'Date'
     # For fundamentals data, the dates are years, not in datetime format (for example, 2020)
     if 'Unnamed: 0' in df_bs.columns:
-        df_bs['Unnamed: 0'] = pd.to_datetime(df_bs['Unnamed: 0'], format='%Y')
+        try:
+            df_bs['Unnamed: 0'] = pd.to_datetime(df_bs['Unnamed: 0'], format='%Y')
+        except (ValueError, TypeError):
+            try:
+                df_bs['Unnamed: 0'] = pd.to_datetime(df_bs['Unnamed: 0'], format='ISO8601')
+            except (ValueError, TypeError):
+                df_bs['Unnamed: 0'] = pd.to_datetime(df_bs['Unnamed: 0'])
         df_bs.set_index('Unnamed: 0', inplace=True)
         df_bs.index.name = 'Date'
 
     if 'Unnamed: 0' in df_pl.columns:
-        df_pl['Unnamed: 0'] = pd.to_datetime(df_pl['Unnamed: 0'], format='%Y')
+        try:
+            df_pl['Unnamed: 0'] = pd.to_datetime(df_pl['Unnamed: 0'], format='%Y')
+        except (ValueError, TypeError):
+            try:
+                df_pl['Unnamed: 0'] = pd.to_datetime(df_pl['Unnamed: 0'], format='ISO8601')
+            except (ValueError, TypeError):
+                df_pl['Unnamed: 0'] = pd.to_datetime(df_pl['Unnamed: 0'])
         df_pl.set_index('Unnamed: 0', inplace=True)
         df_pl.index.name = 'Date'
 
     if 'Unnamed: 0' in df_cf.columns:
-        df_cf['Unnamed: 0'] = pd.to_datetime(df_cf['Unnamed: 0'], format='%Y')
+        try:
+            df_cf['Unnamed: 0'] = pd.to_datetime(df_cf['Unnamed: 0'], format='%Y')
+        except (ValueError, TypeError):
+            try:
+                df_cf['Unnamed: 0'] = pd.to_datetime(df_cf['Unnamed: 0'], format='ISO8601')
+            except (ValueError, TypeError):
+                df_cf['Unnamed: 0'] = pd.to_datetime(df_cf['Unnamed: 0'])
         df_cf.set_index('Unnamed: 0', inplace=True)
         df_cf.index.name = 'Date'
 
     if 'Unnamed: 0' in df_ra.columns:
-        df_ra['Unnamed: 0'] = pd.to_datetime(df_ra['Unnamed: 0'], format='%Y')
+        try:
+            df_ra['Unnamed: 0'] = pd.to_datetime(df_ra['Unnamed: 0'], format='%Y')
+        except (ValueError, TypeError):
+            try:
+                df_ra['Unnamed: 0'] = pd.to_datetime(df_ra['Unnamed: 0'], format='ISO8601')
+            except (ValueError, TypeError):
+                df_ra['Unnamed: 0'] = pd.to_datetime(df_ra['Unnamed: 0'])
         df_ra.set_index('Unnamed: 0', inplace=True)
         df_ra.index.name = 'Date'
 
