@@ -7,6 +7,7 @@ the most recent data.
 
 import os
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
 from collection import get_data
 from preprocessing import get_sentiment, preprocess_data
@@ -87,7 +88,22 @@ def merge_data_job(ticker, temp_datadir, fresh_datadir):
             new_data = pd.read_csv(temp_file_path, parse_dates=True, index_col=0)
             if os.path.exists(fresh_file_path):
                 existing_data = pd.read_csv(fresh_file_path, parse_dates=True, index_col=0)
-                combined_data = pd.concat([existing_data, new_data]).drop_duplicates().sort_index()
+                # Ensure both DataFrames have the same timezone handling
+                if hasattr(existing_data.index, 'tz') and hasattr(new_data.index, 'tz'):
+                    if existing_data.index.tz != new_data.index.tz:
+                        # Convert new_data index to match existing_data timezone
+                        if existing_data.index.tz is None:
+                            new_data.index = new_data.index.tz_localize(None)
+                        else:
+                            new_data.index = new_data.index.tz_convert(existing_data.index.tz)
+                # Filter out overlapping dates from new_data to avoid duplicates
+                new_data = new_data[~new_data.index.isin(existing_data.index)]
+
+                if not new_data.empty:
+                    combined_data = pd.concat([existing_data, new_data]).sort_index()
+                else:
+                    combined_data = existing_data
+                    print(f"ℹ️ No new data to add for {file}")
             else:
                 combined_data = new_data
 
@@ -164,22 +180,14 @@ def run_daily_pipeline(ticker, gemini_api_key=None):
     if not os.listdir(fresh_datadir):
         start_date = end_date - timedelta(days=200)
     else:
-        # Start date is the day after the last date in fresh_datadir
-        existing_files = [f for f in os.listdir(fresh_datadir) if f.endswith('.csv')]
-        if not existing_files:
-            start_date = end_date - timedelta(days=200)
-        else:
-            latest_date = None
-            for file in existing_files:
-                df = pd.read_csv(os.path.join(fresh_datadir, file), parse_dates=True, index_col=0)
-                if not df.empty:
-                    file_latest_date = df.index.max()
-                    if latest_date is None or file_latest_date > latest_date:
-                        latest_date = file_latest_date
-            if latest_date is None:
-                start_date = end_date - timedelta(days=200)
-            else:
-                start_date = latest_date + timedelta(days=1)
+        # Start date is the day after the last date in {ticker}_dates.npy in fresh_featdir
+        dates_path = os.path.join(fresh_featdir, f'{ticker}_dates.npy')
+        if not os.path.exists(dates_path):
+            raise FileNotFoundError(f"{dates_path} not found. Cannot determine start date for data collection.")
+        dates = np.load(dates_path, allow_pickle=True)
+        last_date = pd.to_datetime(dates[-1])
+        start_date = last_date + timedelta(days=1)
+
 
     start_str = start_date.strftime('%Y-%m-%d')
 
