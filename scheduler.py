@@ -145,7 +145,8 @@ def preprocessing_job(ticker, fresh_datadir, fresh_featdir, modeldir, n_componen
         n_components=n_components,
         new_sentiment=new_sentiment,
         gemini_api_key=gemini_api_key,
-        pca_new=False
+        pca_new=False,
+        inference=True
     )
 
     print("✅ Data preprocessing job completed.")
