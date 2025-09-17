@@ -520,7 +520,7 @@ def merge_all_data(ticker, datadir='data/', featdir='features/'):
 
     return df_merged
 
-def build_sequences(ticker, seq_length=60, datadir='data/', featdir='features/'):
+def build_sequences(ticker, seq_length=60, datadir='data/', featdir='features/', inference=False):
     """
     Build sequences for LSTM-DDPG model.
 
@@ -529,6 +529,8 @@ def build_sequences(ticker, seq_length=60, datadir='data/', featdir='features/')
     seq_length (int): The length of each sequence.
     datadir (str): Directory where the data is stored.
     featdir (str): Directory where the features data is stored.
+    inference (bool): If True, include the last date data
+
     Returns:
     x (list): List of feature sequences.
     y (list): List of corresponding trading prices.
@@ -538,7 +540,11 @@ def build_sequences(ticker, seq_length=60, datadir='data/', featdir='features/')
 
     tp = get_trading_data(ticker, datadir=datadir)
 
-    returns = tp.pct_change().shift(-1).dropna()
+
+    if not inference:
+        returns = tp.pct_change().shift(-1).dropna()
+    else:
+        returns = tp.pct_change().dropna()
 
     # Align indices
     df, returns = df.align(returns, join="inner", axis=0)
@@ -667,7 +673,7 @@ def principal_component_analysis(ticker, n_components=0.95, featdir='features/',
 
     return x_train_pca, x_test_pca
 
-def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='models/', spread_coeff=0.1, sigma_noise=0.001, seq_length=60, test_size=0.2, n_components=0.95, new_sentiment=False,gemini_api_key=None, start_date=None, end_date=None, pca_new=True):
+def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='models/', spread_coeff=0.1, sigma_noise=0.001, seq_length=60, test_size=0.2, n_components=0.95, new_sentiment=False,gemini_api_key=None, start_date=None, end_date=None, pca_new=True, inference=False):
     """
     Full preprocessing pipeline to prepare data for reinforcement learning models.
 
@@ -686,6 +692,7 @@ def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='mode
     start_date (str|datetime|date): Start date for filtering news data.
     end_date (str|datetime|date): End date for filtering news data.
     pca_new (bool): Whether to fit a new PCA model or load existing one.
+    inference (bool): If True, build sequences including the last date data.
 
     Saves:
     - x_train.npy, x_test.npy: PCA transformed feature sequences.
@@ -701,7 +708,7 @@ def preprocess_data(ticker, datadir='data/', featdir='features/', modeldir='mode
     _ = merge_all_data(ticker, datadir=datadir, featdir=featdir)
 
     # Build sequences
-    _ = build_sequences(ticker, seq_length=seq_length, datadir=datadir, featdir=featdir)
+    _ = build_sequences(ticker, seq_length=seq_length, datadir=datadir, featdir=featdir, inference=inference)
 
     # Train-test split
     _ = train_test_save(ticker, test_size=test_size, featdir=featdir, datadir=datadir)
