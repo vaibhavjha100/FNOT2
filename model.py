@@ -43,6 +43,8 @@ class TradingEnv(gym.Env):
         self.portfolio_value = self.initial_balance
         self.prev_portfolio_value = self.initial_balance
         self.lock_counter = 0
+        self.peak_value = self.initial_balance
+        self.episode_rewards = []
 
         return self._next_observation(), {}
 
@@ -82,11 +84,34 @@ class TradingEnv(gym.Env):
         self.position = new_position
         self.current_step += 1
 
+        # Step reward: log return of portfolio value
         reward = np.log(max(self.portfolio_value, 1e-8)) - np.log(max(self.prev_portfolio_value, 1e-8))
+        self.episode_rewards.append(reward)
+
+        # Time decay penalty on holding cash position
+        if self.position == 0:
+            reward -= 0.0002
+
+        daily_return = self.portfolio_value/self.prev_portfolio_value - 1
 
         self.prev_portfolio_value = self.portfolio_value
 
+        self.peak_value = max(self.peak_value, self.portfolio_value)
+
         terminated = (self.current_step >= len(self.returns) - 1) or (self.portfolio_value <= 0)
+
+        if terminated:
+            final_return = self.portfolio_value / self.initial_balance - 1
+            reward += final_return
+
+            # Drawdown penalty
+            drawdown = (self.peak_value - self.portfolio_value) / self.peak_value
+            reward -= 0.5 * max(drawdown - 0.2, 0)
+
+            # Downside volatility penalty
+            downside_returns = [r for r in self.episode_rewards if r < 0]
+            if len(downside_returns) > 1:
+                reward -= 0.5 * np.std(downside_returns)
 
         obs = self._next_observation()
 
@@ -96,8 +121,8 @@ class TradingEnv(gym.Env):
             "prev_portfolio_value": self.prev_portfolio_value,
             "position": self.position,
             "locked_days_left": self.lock_counter,
-            "daily_return": self.portfolio_value/self.prev_portfolio_value - 1,
-            "turnover": turnover
+            "daily_return": daily_return,
+            "turnover": turnover,
         }
 
         return obs, reward, terminated, False, info
