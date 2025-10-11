@@ -19,6 +19,7 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback, CheckpointCallback
 import json
 from datetime import datetime
+import torch
 
 
 class TradingEnv(gym.Env):
@@ -337,6 +338,15 @@ def model_pipeline():
 
     print(f"✓ Model directory: {save_path}\n")
 
+    # Check for gpu acceleration
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    print(
+        f"GPU acceleration is {'enabled' if device == 'cuda' else 'disabled'}. Using device: {torch.cuda.get_device_name(0) if device == 'cuda' else 'CPU'}")
+
     # Model Architecture
 
     policy_kwargs = dict(
@@ -370,7 +380,8 @@ def model_pipeline():
         max_grad_norm=0.5,  # Gradient clipping
         policy_kwargs=policy_kwargs,
         verbose=1,
-        tensorboard_log=os.path.join(save_path, "tensorboard")
+        tensorboard_log=os.path.join(save_path, "tensorboard"),
+        device=device
     )
 
     print("✓ RecurrentPPO agent initialized\n")
