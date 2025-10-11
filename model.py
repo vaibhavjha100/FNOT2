@@ -209,7 +209,7 @@ def evaluate_agent(model, env, n_eval_episodes=20, deterministic=True):
 
         done = False
         episode_reward = 0
-        portfolio_values = [env.envs[0].initial_balance]
+        portfolio_values = [env.get_attr('initial_balance')[0]]
         daily_returns = []
         trades = 0
         prev_position = 0
@@ -221,8 +221,10 @@ def evaluate_agent(model, env, n_eval_episodes=20, deterministic=True):
                 episode_start=episode_start,
                 deterministic=deterministic
             )
-            obs, reward, terminated, truncated, info = env.step(action)
-            done = terminated[0] or truncated[0]
+            #obs, reward, terminated, truncated, info = env.step(action)
+            obs, reward, done, info = env.step(action)
+            #done = terminated[0] or truncated[0]
+            done = done[0]
             episode_start = np.array([False])
 
             episode_reward += reward[0]
@@ -280,7 +282,7 @@ def evaluate_agent(model, env, n_eval_episodes=20, deterministic=True):
         "mean_final_portfolio": float(np.mean(final_portfolios)),
         "std_final_portfolio": float(np.std(final_portfolios)),
         "mean_total_trades": float(np.mean(total_trades)),
-        "total_return_pct": float((np.mean(final_portfolios) / env.envs[0].initial_balance - 1) * 100)
+        "total_return_pct": float((np.mean(final_portfolios) / env.get_attr('initial_balance')[0] - 1) * 100)
     }
 
     return metrics
